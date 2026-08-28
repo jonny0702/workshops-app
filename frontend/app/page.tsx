@@ -52,7 +52,7 @@ export default function WorkshopsPage() {
   };
 
   return (
-    <Authenticator>
+    <Authenticator loginMechanisms={['email']}>
       {({ signOut, user }) => (
         <main className="min-h-screen bg-gray-50 p-8 font-sans">
           <div className="max-w-4xl mx-auto">
