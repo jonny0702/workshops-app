@@ -1,0 +1,1 @@
+{"statusCode": 201, "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}, "body": "{\"mensaje\": \"Taller 'Bootcamp de AWS' creado y evento emitido.\"}"}
