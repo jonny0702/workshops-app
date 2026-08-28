@@ -16,10 +16,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Linter y Pruebas Unitarias (Backend)
-        run: |
-          pip install flake8 pytest boto3
-          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          pytest backend/
+              env:
+                AWS_DEFAULT_REGION: us-east-1
+                AWS_ACCESS_KEY_ID: testing
+                AWS_SECRET_ACCESS_KEY: testing
+              run: |
+                pip install flake8 pytest boto3
+                flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+                pytest backend/
       - name: Construir Frontend (Next.js)
         working-directory: ./frontend
         env:
