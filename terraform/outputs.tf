@@ -15,3 +15,12 @@ output "api_gateway_url" {
   description = "URL base de tu API Gateway"
   value       = aws_apigatewayv2_api.http_api.api_endpoint
 }
+output "cloudfront_domain" {
+  description = "URL pública de tu aplicación Next.js"
+  value       = "https://${aws_cloudfront_distribution.cdn.domain_name}"
+}
+
+output "s3_frontend_bucket" {
+  description = "Nombre del bucket S3 del frontend"
+  value       = aws_s3_bucket.frontend.id
+}
