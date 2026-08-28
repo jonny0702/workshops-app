@@ -47,6 +47,11 @@ jobs:
     needs: build-and-test
     environment: dev
     runs-on: ubuntu-latest
+# NUEVO: Permisos explícitos para que el token pueda crear el Pull Request
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
       - uses: actions/checkout@v4
       - name: Configurar AWS
