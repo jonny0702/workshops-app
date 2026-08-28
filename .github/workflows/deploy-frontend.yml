@@ -52,6 +52,24 @@ jobs:
           
       - name: Deploy Frontend S3
         run: aws s3 sync frontend/out/ s3://${{ secrets.FRONTEND_BUCKET }} --delete
+      
+      - name: Crear PR automático hacia Main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Verifica si ya existe un PR abierto para no duplicarlos
+          PR_EXISTS=$(gh pr list --base main --head development --json number --jq 'length')
+          
+          if [ "$PR_EXISTS" -eq "0" ]; then
+            gh pr create \
+              --base main \
+              --head development \
+              --title "🚀 Release listo para Producción" \
+              --body "El entorno de DEV se desplegó correctamente y pasó las pruebas. Aprueba este PR para desplegar en AWS PROD."
+          else
+            echo "Ya existe un PR abierto hacia main. Se actualizó con estos commits."
+          fi
+
 
   deploy-prod:
     if: github.event_name == 'release'
