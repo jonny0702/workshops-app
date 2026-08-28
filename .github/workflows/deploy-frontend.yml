@@ -43,7 +43,7 @@ jobs:
           path: frontend/out/
 
   deploy-dev:
-    if: github.ref == 'refs/heads/development' || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/development'
     needs: build-and-test
     environment: dev
     runs-on: ubuntu-latest
@@ -97,7 +97,7 @@ jobs:
           fi
 
   deploy-prod:
-    if: github.event_name == 'release'
+    if: github.ref == 'refs/heads/main'
     needs: build-and-test
     environment: prod 
     runs-on: ubuntu-latest
