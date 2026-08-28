@@ -28,6 +28,11 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["events:PutEvents"]
+        Resource = aws_cloudwatch_event_bus.event_bus.arn
       }
     ]
   })
@@ -50,6 +55,7 @@ resource "aws_lambda_function" "api_handler" {
   environment {
     variables = {
       TABLE_NAME = aws_dynamodb_table.main_table.name # Inyección automática
+      EVENT_BUS_NAME = aws_cloudwatch_event_bus.event_bus.name
     }
   }
 }
