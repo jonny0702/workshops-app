@@ -17,6 +17,10 @@ def lambda_handler(event, context):
     headers = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
     
     try:
+        # --- RUTAS DE SALUD Y PRUEBAS ---
+        if route_key == 'GET /healthz':
+            return { "statusCode": 200, "headers": headers, "body": json.dumps({"status": "operativo", "version": "1.0"}) }
+        
         # --- RUTA PÚBLICA: LEER TALLERES DE DYNAMODB ---
         if route_key == 'GET /workshops':
             # Escaneamos la tabla buscando solo los items que sean Talleres (SK = META)
