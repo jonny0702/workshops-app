@@ -4,7 +4,7 @@ resource "aws_cognito_user_pool" "workshops_pool" {
   name = "${var.project_name}-${var.environment}-user-pool"
 
   # Queremos que los usuarios inicien sesión con su email (no con un username raro)
-  alias_attributes = ["email"]
+  username_attributes = ["email"]
   
   # Verificación automática del correo electrónico
   auto_verified_attributes = ["email"]
