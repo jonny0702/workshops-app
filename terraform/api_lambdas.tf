@@ -124,3 +124,17 @@ resource "aws_lambda_permission" "api_gw_permission" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
+#--- PRUEBAS ---
+resource "aws_apigatewayv2_route" "get_healthz" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /healthz"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+# Alias de Lambda para preparar Blue/Green deployments
+resource "aws_lambda_alias" "prod_alias" {
+  name             = "PROD"
+  description      = "Alias de Producción para despliegues seguros"
+  function_name    = aws_lambda_function.api_handler.function_name
+  function_version = "$LATEST"
+}
