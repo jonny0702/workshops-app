@@ -24,6 +24,7 @@ jobs:
           pip install flake8 pytest boto3
           flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
           pytest backend/
+          
       - name: Construir Frontend (Next.js)
         working-directory: ./frontend
         env:
@@ -33,6 +34,13 @@ jobs:
         run: |
           npm install
           npm run build
+          
+      # NUEVO: Guardamos la carpeta compilada en GitHub
+      - name: Subir Artefacto del Frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/out/
 
   deploy-dev:
     if: github.ref == 'refs/heads/development' || github.ref == 'refs/heads/main'
@@ -57,6 +65,13 @@ jobs:
           terraform init
           terraform apply -auto-approve -var="environment=dev"
           
+      # NUEVO: Descargamos la carpeta compilada a esta nueva máquina
+      - name: Descargar Artefacto del Frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/out/
+          
       - name: Deploy Frontend S3
         run: aws s3 sync frontend/out/ s3://${{ secrets.FRONTEND_BUCKET }} --delete
       
@@ -64,7 +79,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Verifica si ya existe un PR abierto para no duplicarlos
           PR_EXISTS=$(gh pr list --base main --head development --json number --jq 'length')
           
           if [ "$PR_EXISTS" -eq "0" ]; then
@@ -99,6 +113,16 @@ jobs:
         run: |
           terraform init
           terraform apply -auto-approve -var="environment=prod"
+          
+      # NUEVO: Descargamos también para Producción y subimos a S3
+      - name: Descargar Artefacto del Frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/out/
+          
+      - name: Deploy Frontend S3 (PROD)
+        run: aws s3 sync frontend/out/ s3://${{ secrets.FRONTEND_BUCKET }} --delete
           
       - name: Invalidar CDN y Smoke Test
         run: |
