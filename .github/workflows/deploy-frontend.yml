@@ -1,0 +1,137 @@
+name: CI/CD Pipeline - Workshops
+
+on:
+  push:
+    branches: [ "development", "main" ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Linter y Pruebas Unitarias (Backend)
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+        run: |
+          pip install flake8 pytest boto3
+          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          pytest backend/
+          
+      - name: Construir Frontend (Next.js)
+        working-directory: ./frontend
+        env:
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID: ${{ secrets.NEXT_PUBLIC_COGNITO_USER_POOL_ID }}
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_COGNITO_CLIENT_ID }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        run: |
+          npm install
+          npm run build
+          
+      # NUEVO: Guardamos la carpeta compilada en GitHub
+      - name: Subir Artefacto del Frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/out/
+
+  deploy-dev:
+    if: github.ref == 'refs/heads/development' || github.ref == 'refs/heads/main'
+    needs: build-and-test
+    environment: dev
+    runs-on: ubuntu-latest
+# NUEVO: Permisos explícitos para que el token pueda crear el Pull Request
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Terraform Deploy (DEV)
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="environment=dev"
+          
+      # NUEVO: Descargamos la carpeta compilada a esta nueva máquina
+      - name: Descargar Artefacto del Frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/out/
+          
+      - name: Deploy Frontend S3
+        run: aws s3 sync frontend/out/ s3://${{ secrets.FRONTEND_BUCKET }} --delete
+      
+      - name: Crear PR automático hacia Main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_EXISTS=$(gh pr list --base main --head development --json number --jq 'length')
+          
+          if [ "$PR_EXISTS" -eq "0" ]; then
+            gh pr create \
+              --base main \
+              --head development \
+              --title "🚀 Release listo para Producción" \
+              --body "El entorno de DEV se desplegó correctamente y pasó las pruebas. Aprueba este PR para desplegar en AWS PROD."
+          else
+            echo "Ya existe un PR abierto hacia main. Se actualizó con estos commits."
+          fi
+
+  deploy-prod:
+    if: github.event_name == 'release'
+    needs: build-and-test
+    environment: prod 
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+          
+      - name: Terraform Deploy (PROD)
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="environment=prod"
+          
+      # NUEVO: Descargamos también para Producción y subimos a S3
+      - name: Descargar Artefacto del Frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/out/
+          
+      - name: Deploy Frontend S3 (PROD)
+        run: aws s3 sync frontend/out/ s3://${{ secrets.FRONTEND_BUCKET }} --delete
+          
+      - name: Invalidar CDN y Smoke Test
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} --paths "/*"
+          sleep 10
+          echo "Ejecutando Smoke Test contra API Gateway..."
+          curl -f ${{ secrets.NEXT_PUBLIC_API_URL }}/healthz || exit 1
