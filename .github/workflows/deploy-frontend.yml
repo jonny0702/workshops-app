@@ -1,0 +1,81 @@
+name: CI/CD Pipeline - Workshops
+
+on:
+  push:
+    branches: [ "development", "main" ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Linter y Pruebas Unitarias (Backend)
+        run: |
+          pip install flake8 pytest boto3
+          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          pytest backend/
+      - name: Construir Frontend (Next.js)
+        working-directory: ./frontend
+        env:
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID: ${{ secrets.NEXT_PUBLIC_COGNITO_USER_POOL_ID }}
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_COGNITO_CLIENT_ID }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        run: |
+          npm install
+          npm run build
+
+  deploy-dev:
+    if: github.ref == 'refs/heads/development' || github.ref == 'refs/heads/main'
+    needs: build-and-test
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Terraform Deploy (DEV)
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="environment=dev"
+          
+      - name: Deploy Frontend S3
+        run: aws s3 sync frontend/out/ s3://${{ secrets.FRONTEND_BUCKET }} --delete
+
+  deploy-prod:
+    if: github.event_name == 'release'
+    needs: build-and-test
+    environment: prod 
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          
+      - name: Terraform Deploy (PROD)
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="environment=prod"
+          
+      - name: Invalidar CDN y Smoke Test
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} --paths "/*"
+          sleep 10
+          echo "Ejecutando Smoke Test contra API Gateway..."
+          curl -f ${{ secrets.NEXT_PUBLIC_API_URL }}/healthz || exit 1
